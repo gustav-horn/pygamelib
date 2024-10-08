@@ -248,10 +248,10 @@ class Widget(base.PglBaseObject):
         self.__parent: Union["Widget", "Layout", None] = None
         self.__width: int = width
         self.__height: int = height
-        self.__maximum_width: int = maximum_width
+        self.__maximum_width: int = max(maximum_width, 1)
         if self.__maximum_width < self.__width:
             self.__maximum_width = self.__width
-        self.__maximum_height: int = maximum_height
+        self.__maximum_height: int = max(maximum_height, 1)
         if self.__height > self.__maximum_height:
             self.__maximum_height = self.__height
 
@@ -2616,7 +2616,7 @@ class FileDialog(Dialog):
         return self.__path
 
 
-class GridSelector(Widget):
+class GridSelector(object):
     """
     The GridSelector is a widget that present a list of elements as a grid to the user.
 
@@ -2632,63 +2632,44 @@ class GridSelector(Widget):
     def __init__(
         self,
         choices: list = None,
-        width: int = 0,
-        height: int = 0,
-        minimum_width: int = 0,
-        minimum_height: int = 0,
-        maximum_width: int = 5,
-        maximum_height: int = 10,
-        config: Optional[UiConfig] = None,
+        max_height: int = None,
+        max_width: int = None,
+        config: UiConfig = None,
     ) -> None:
         """
         :param choices: A list of choices to present to the user. The elements of the
            list needs to be str or :class:`~pygamelib.gfx.core.Sprixel`.
         :type choices: list
-        :param minimum_width: The minimum width of the GridSelector.
-        :type minimum_width: int
-        :param minimum_height: The minimum height of the GridSelector.
-        :type minimum_height: int
-        :param maximum_width: The maximum width of the GridSelector.
-        :type maximum_width: int
-        :param maximum_height: The maximum height of the GridSelector.
-        :type maximum_height: int
+        :param max_height: The maximum height of the grid selector.
+        :type max_height: int
+        :param max_width: The maximum width of the grid selector.
+        :type max_width: int
         :param config: The configuration object.
         :type config: :class:`UiConfig`
 
         Example::
 
             choices = ["@","#","$","%","&","*","[","]"]
-            grid_selector = GridSelector(
-                choices,
-                maximum_width=30,
-                maximum_height=10,
-                config=conf
-                )
+            grid_selector = GridSelector(choices, 10, 30, conf)
             screen.place(grid_selector, 10, 10)
             screen.update()
         """
-        if config is None:
-            config = UiConfig.instance()
-        super().__init__(
-            width=width,
-            height=height,
-            minimum_width=minimum_width,
-            minimum_height=minimum_height,
-            maximum_width=maximum_width,
-            maximum_height=maximum_height,
-            bg_color=config.input_bg_color,
-            config=config,
-        )
+        super().__init__()
         self.__choices = []
         if choices is not None and type(choices) is list:
             self.__choices = choices
+        self.__max_height = 5
+        if max_height is not None and type(max_height) is int:
+            self.__max_height = max_height
+        self.__max_width = 10
+        if max_width is not None and type(max_width) is int:
+            self.__max_width = max_width
+        self._config = config
         self.__current_choice = 0
         self.__current_page = 0
         self.__cache = []
         self._build_cache()
-        self.__items_per_page = max(
-            int(self.maximum_height / 2 * self.maximum_width / 2), 1
-        )  # set floor of 1 to avoid ZeroDivisionError
+        self.__items_per_page = int(self.__max_height / 2 * self.__max_width / 2)
         # config.game.log(f"items per page={self.__items_per_page}")
 
     def _build_cache(self):
@@ -2707,7 +2688,7 @@ class GridSelector(Widget):
                     "GridSelector: the choices must be strings or Sprixels."
                 )
             self.__cache.append(s)
-        self.__items_per_page = int(self.maximum_height / 2 * self.maximum_width / 2)
+        self.__items_per_page = int(self.__max_height / 2 * self.__max_width / 2)
 
     @property
     def choices(self) -> int:
@@ -2730,6 +2711,42 @@ class GridSelector(Widget):
             raise base.PglInvalidTypeException(
                 "GridSelector.choices = value: 'value' must be a list. "
                 f"'{value}' is not a list"
+            )
+
+    @property
+    def max_height(self) -> int:
+        """
+        Get and set the maximum height of the grid selector, it needs to be an int.
+        """
+        return self.__max_height
+
+    @max_height.setter
+    def max_height(self, value):
+        if type(value) is int:
+            self.__max_height = value
+            self._build_cache()
+        else:
+            raise base.PglInvalidTypeException(
+                "GridSelector.max_height = value: 'value' must be an int. "
+                f"'{value}' is not an int"
+            )
+
+    @property
+    def max_width(self) -> int:
+        """
+        Get and set the maximum width of the grid selector, it needs to be an int.
+        """
+        return self.__max_width
+
+    @max_width.setter
+    def max_width(self, value):
+        if type(value) is int:
+            self.__max_width = value
+            self._build_cache()
+        else:
+            raise base.PglInvalidTypeException(
+                "GridSelector.max_width = value: 'value' must be an int. "
+                f"'{value}' is not an int"
             )
 
     @property
@@ -2792,13 +2809,13 @@ class GridSelector(Widget):
         """
         Move the selection cursor one row up.
         """
-        self.current_choice -= round(self.maximum_width / 2)
+        self.current_choice -= round(self.max_width / 2)
 
     def cursor_down(self) -> None:
         """
         Move the selection cursor one row down.
         """
-        self.current_choice += round(self.maximum_width / 2)
+        self.current_choice += round(self.max_width / 2)
 
     def cursor_left(self) -> None:
         """
@@ -2871,12 +2888,8 @@ class GridSelector(Widget):
         #       is not cleared when re-rendered (the coordinates calculation is probably
         #       wrong somewhere).
         buffer[row][column] = " "
-        self.__maximum_width = functions.clamp(
-            self.__maximum_width, 0, buffer_width - 2
-        )
-        self.__maximum_height = functions.clamp(
-            self.__maximum_height, 0, buffer_height - 2
-        )
+        self.__max_width = functions.clamp(self.__max_width, 0, buffer_width - 2)
+        self.__max_height = functions.clamp(self.__max_height, 0, buffer_height - 2)
         crow = 1
         ccol = 1
         col_offset = 1
@@ -2944,12 +2957,8 @@ class GridSelectorDialog(Dialog):
     def __init__(
         self,
         choices: list = None,
-        width: int = 0,
-        height: int = 0,
-        minimum_width: int = 0,
-        minimum_height: int = 0,
-        maximum_width: int = 5,
-        maximum_height: int = 10,
+        max_height: int = None,
+        max_width: int = None,
         title: str = None,
         config: UiConfig = None,
     ) -> None:
@@ -2957,54 +2966,28 @@ class GridSelectorDialog(Dialog):
         :param choices: A list of choices to present to the user. The elements of the
            list needs to be str or :class:`~pygamelib.gfx.core.Sprixel`.
         :type choices: list
-        :param minimum_width: The minimum width of the GridSelector.
-        :type minimum_width: int
-        :param minimum_height: The minimum height of the GridSelector.
-        :type minimum_height: int
-        :param maximum_width: The maximum width of the GridSelector.
-        :type maximum_width: int
-        :param maximum_height: The maximum height of the GridSelector.
-        :type maximum_height: int
+        :param max_height: The maximum height of the grid selector.
+        :type max_height: int
+        :param max_width: The maximum width of the grid selector.
+        :type max_width: int
         :param config: The configuration object.
         :type config: :class:`UiConfig`
 
         Example::
 
             choices = ["@","#","$","%","&","*","[","]"]
-            grid_dialog = GridSelector(
-                choices=choices,
-                maximum_width=30,
-                maximum_height=10,
-                config=conf)
+            grid_dialog = GridSelector(choices, 10, 30, conf)
             screen.place(grid_dialog, 10, 10)
             grid_dialog.show()
         """
-        if config is None:
-            config = UiConfig.instance()
         super().__init__(config=config)
         self.__grid_selector = None
         if not config.borderless_dialog:
             self.__grid_selector = GridSelector(
-                choices,
-                width,
-                height,
-                minimum_width,
-                minimum_height,
-                maximum_width - 4,
-                maximum_height - 3,
-                config,
+                choices, max_height - 3, max_width - 4, config
             )
         else:
-            self.__grid_selector = GridSelector(
-                choices,
-                width,
-                height,
-                minimum_width,
-                minimum_height,
-                maximum_width - 4,
-                maximum_height - 3,
-                config,
-            )
+            self.__grid_selector = GridSelector(choices, max_height, max_width, config)
         self.__title = ""
         if title is not None and type(title) is str:
             self.__title = title
@@ -3135,7 +3118,7 @@ class GridSelectorDialog(Dialog):
             # TODO: It looks like there is a bug in the pagination.
             gs = self.__grid_selector
             # Pages are numbered from 0.
-            pagination = f"{gs.current_page + 1}/{gs.nb_pages()}"
+            pagination = f"{gs.current_page+1}/{gs.nb_pages()}"
             lp = len(pagination)
             for c in range(0, lp):
                 buffer[row + self.__grid_selector.max_height + 2][
